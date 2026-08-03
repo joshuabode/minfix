@@ -1,6 +1,6 @@
 # minfix
 
-A low-latency, memory-mapped **UART communication peripheral** with hardware-side
+A low-latency, memory-mapped FIX parser with a **UART communication peripheral** using hardware-side
 message framing, flow control, and error detection, integrated with an
 **interrupt-driven, multiprocessing operating system** on a RISC-V-based SoC. The
 system implements a client/server electronic-trading scenario: multiple client
@@ -19,10 +19,10 @@ low-latency, and keeping the messaging layer robust under burst load.
 
 ## System architecture
 
-![System diagram of the UART communication interface](docs/uart-system-diagram.png)
+![System diagram of the UART communication interface](docs/uart_interface.png)
 *Figure 1 — RTL block diagram of the communication peripheral (`UART_better`).*
 
-![High-level software/hardware co-design and integration](docs/system-integration.png)
+![High-level software/hardware co-design and integration](docs/system_integration.png)
 *Figure 2 — Client/server integration: multiple FIX/UART links feeding an
 interrupt-driven OS, message queue, scheduler, and matching engine.*
 
@@ -90,8 +90,6 @@ removing the need to buffer whole messages in the CPU-visible FIFO.
 ### Multiprocessing scheduler
 - The scheduler supports up to **17 processes** (16 client processes + 1 init), with
   clients sleeping at intervals to rate-limit outgoing orders.
-- Multiprocessing capability was validated independently on the same scheduler in an
-  earlier exercise.
 
 ---
 
