@@ -1,10 +1,11 @@
-# minfix
+# MinFIX Distributed Market Simulator
 
-A low-latency, memory-mapped FIX parser with a **UART communication peripheral** using hardware-side
+A low-latency, memory-mapped [MinFIX](docs/Minimised_FIX_Protocol.md) parser
+with a **UART communication peripheral** using hardware-side
 message framing, flow control, and error detection, integrated with an
 **interrupt-driven, multiprocessing operating system** on a RISC-V-based SoC. The
-system implements a client/server electronic-trading scenario: multiple client
-boards stream **FIX** orders to a server board running a matching engine.
+system implements a client/server electronic-trading scenario: multiple clients
+stream **FIX**-like orders to a server running a matching engine.
 
 ---
 
@@ -20,23 +21,23 @@ low-latency, and keeping the messaging layer robust under burst load.
 ## System architecture
 
 ![System diagram of the UART communication interface](docs/uart_interface.png)
-*Figure 1 — RTL block diagram of the communication peripheral (`UART_better`).*
+_Figure 1 — RTL block diagram of the communication peripheral (`UART_better`)._
 
 ![High-level software/hardware co-design and integration](docs/system_integration.png)
-*Figure 2 — Client/server integration: multiple FIX/UART links feeding an
-interrupt-driven OS, message queue, scheduler, and matching engine.*
+_Figure 2 — Client/server integration: multiple FIX/UART links feeding an
+interrupt-driven OS, message queue, scheduler, and matching engine._
 
 ### RTL module hierarchy (`UART_better`)
 
-| Module | Role |
-|---|---|
-| `uart_tx` | Serializes and drives the transmit line, with parity + framing |
-| `uart_rx` | Samples the receive line, recovers bytes, checks parity/framing |
+| Module    | Role                                                                         |
+| --------- | ---------------------------------------------------------------------------- |
+| `uart_tx` | Serializes and drives the transmit line, with parity + framing               |
+| `uart_rx` | Samples the receive line, recovers bytes, checks parity/framing              |
 | `uart_cu` | Control unit — drives all internal enables/data-select without software help |
-| `baud` | Baud-rate generation |
-| `tx_fifo` | Word-in / byte-out transmit buffer (`data_in[31:0]`) |
-| `rx_fifo` | Byte buffer feeding the FIX parser (`byte_out`, `data_valid`) |
-| `Mux` | Selects between payload data and control characters (`ctrl_data`) |
+| `baud`    | Baud-rate generation                                                         |
+| `tx_fifo` | Word-in / byte-out transmit buffer (`data_in[31:0]`)                         |
+| `rx_fifo` | Byte buffer feeding the FIX parser (`byte_out`, `data_valid`)                |
+| `Mux`     | Selects between payload data and control characters (`ctrl_data`)            |
 
 Each communication link terminates in a **FIX parser**, which raises
 `data_ready_interrupt` only once a complete, valid message has been assembled,
@@ -47,7 +48,8 @@ removing the need to buffer whole messages in the CPU-visible FIFO.
 ## Key design features
 
 ### Minimal software intervention on the datapath
-- The transmit FIFO is **written in 32-bit words but serialized to bytes in
+
+- The transmit FIFO is **written in 32-bit words but serialised to bytes in
   hardware**, so enqueuing a word for transmission costs a single store to a mapped
   address — one memory write per word, not per byte.
 - The control unit sets all internal enable/select signals autonomously. Once data
@@ -59,6 +61,7 @@ removing the need to buffer whole messages in the CPU-visible FIFO.
   hardware.
 
 ### Robustness / flow control
+
 - **X-On / X-Off software flow control.** When the receive FIFO fills, the control
   unit switches the transmit mux to `ctrl_data` and emits an X-Off; a received
   X-Off halts the local transmitter, giving the far-end RX FIFO time to drain. This
@@ -69,6 +72,7 @@ removing the need to buffer whole messages in the CPU-visible FIFO.
   transmission; failure to do so flags a malformed data frame via `data_error`.
 
 ### Memory-mapped software interface
+
 - The peripheral exposes a word-addressable region **`0x0002_0000 → 0x0002_003F`**.
   Each word address maps to a distinct transmitter — writing to a different address
   sends data over a different physical pin, giving up to 16 independent transmit
@@ -78,6 +82,7 @@ removing the need to buffer whole messages in the CPU-visible FIFO.
   not touch framing directly.
 
 ### Interrupt-driven message handling
+
 - When a parser signals a complete message, the ISR disambiguates the source by
   reading a control register whose lower halfword is a bit-per-parser interrupt
   bitmap. Multiple simultaneous interrupts are serviced in turn, and each is
@@ -88,8 +93,14 @@ removing the need to buffer whole messages in the CPU-visible FIFO.
   one process waits at a time).
 
 ### Multiprocessing scheduler
+
 - The scheduler supports up to **17 processes** (16 client processes + 1 init), with
   clients sleeping at intervals to rate-limit outgoing orders.
+
+### Matching engine software design
+
+- Uses a memory pool and free list (implemented as a stack) to allocate orders which minimises matching latency and maximises order capacity
+- Uses two linked list structures for the order book, maintaining sort with linear search on each insertion.
 
 ---
 
@@ -107,7 +118,7 @@ made whole-message CPU-side buffering unnecessary and shortened the receive path
 - **RTL:** Verilog/SystemVerilog (UART TX/RX, control unit, baud generator, FIFOs)
 - **Target:** RISC-V-based SoC with memory-mapped I/O, user/machine privilege modes,
   and `ECALL`-based system calls
-- **Software:** low-level C / assembly — ISR, memory-mapped driver, network library,
+- **Software:** RISC-V assembly — ISR, memory-mapped driver, network library,
   scheduler integration
 - **Protocol:** UART framing with STX/EOT control characters; FIX application layer
 
